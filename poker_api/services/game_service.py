@@ -494,6 +494,13 @@ class GameService:
                 total_collected += player_game.current_bet
                 # Deduct the bet from player's stack (delayed from when bet was made)
                 player_game.stack -= player_game.current_bet
+                
+                # CRITICAL: Set final_stack immediately when player runs out of money
+                # This ensures game completion logic works properly for both bots and humans
+                if player_game.stack <= 0 and player_game.final_stack is None:
+                    player_game.final_stack = player_game.stack  # Will be 0 or negative
+                    logger.info(f"💰 Player {player_game.player.user.username} ran out of money - final_stack set to ${player_game.final_stack}")
+                
                 player_game.save()
                 logger.debug(f"Collecting ${player_game.current_bet} from {player_game.player.user.username}, stack now ${player_game.stack}")
         
@@ -1526,8 +1533,7 @@ class GameService:
         if len(players_with_money) < 2:
             # End the game if not enough players have money
             logger.info(f"Game {game.id} ended: only {len(players_with_money)} players with money")
-            game.status = 'FINISHED'
-            game.save()
+            GameService._complete_game(game, f"Not enough players with money ({len(players_with_money)})")
             return
         
         # Reset players who have money to active and clear their cards (exclude cashed out players)
@@ -1753,8 +1759,15 @@ class GameService:
         
         logger.info(f"📊 Ready check: {ready_count}/{total_count} eligible players ready for next hand")
         
+        # Check if we have enough players to continue
+        if total_count < 2:
+            # Not enough players to continue - end the game
+            logger.info(f"🏁 Not enough eligible players ({total_count}) to continue - ending game {game.id}")
+            GameService._complete_game(game, f"Not enough eligible players ({total_count})")
+            return True  # Game ended, so we handled the situation
+        
         # If all eligible players are ready and we have enough for a hand, start next hand
-        if total_count > 1 and ready_count == total_count:
+        if ready_count == total_count:
             logger.info(f"🎯 All players ready! Auto-starting next hand for game {game.id}")
             
             # Clear winner info first
@@ -1768,13 +1781,101 @@ class GameService:
             GameService.broadcast_game_update(game.id)
             return True
         
+        # Still waiting for players to be ready
+        logger.info(f"⏳ Waiting for players to be ready: {ready_count}/{total_count} ready")
         return False
+    
+    @staticmethod
+    @transaction.atomic
+    def _complete_game(game, reason="Game completed"):
+        """
+        Centralized method to properly complete a game.
+        
+        This method handles all the necessary steps to finish a game:
+        1. Generate game summary
+        2. Broadcast summary notification
+        3. Delete the table (which cascades to delete the game)
+        
+        Args:
+            game: The Game instance to complete
+            reason: Human-readable reason for completion (for logging)
+        
+        Returns:
+            dict: The generated game summary
+        """
+        logger.info(f"🏁 Completing game {game.id}: {reason}")
+        
+        try:
+            # Check if all players have final stacks set (required for summary generation)
+            all_players = PlayerGame.objects.filter(game=game)
+            players_with_final_stack = all_players.filter(final_stack__isnull=False)
+            
+            if all_players.count() == 0:
+                logger.warning(f"Cannot complete game {game.id} - no players found")
+                # Still try to set status to FINISHED as fallback
+                game.status = 'FINISHED'
+                game.save()
+                return None
+                
+            logger.info(f"🔍 Game completion check: {players_with_final_stack.count()}/{all_players.count()} players have final_stack set")
+            
+            # DEFENSIVE: Always set final stacks for any players who don't have them
+            missing_final_stack_count = 0
+            for pg in all_players:
+                if pg.final_stack is None:
+                    pg.final_stack = pg.stack
+                    pg.save()
+                    missing_final_stack_count += 1
+                    logger.info(f"🔧 Set missing final_stack for {pg.player.user.username}: ${pg.stack}")
+            
+            if missing_final_stack_count > 0:
+                logger.warning(f"⚠️ Had to set final_stack for {missing_final_stack_count} players during game completion")
+            
+            # Generate game summary with error handling
+            logger.info(f"📊 Generating game summary for game {game.id}")
+            summary = game.generate_game_summary()
+            
+            if not summary:
+                logger.error(f"❌ Failed to generate game summary for game {game.id}")
+                # Fallback: just set status to FINISHED
+                game.status = 'FINISHED'
+                game.save()
+                return None
+            
+            # Broadcast game summary notification to any connected clients
+            GameService.broadcast_game_summary_available(game.id, summary)
+            logger.info(f"📡 Broadcasted game summary for game {game.id}")
+            
+            # Automatically delete the table since the game is complete
+            table = game.table
+            table_name = table.name
+            table.delete()  # This will cascade delete the game and all related data
+            logger.info(f"🗑️ Table '{table_name}' automatically deleted after game completion")
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"❌ Critical error completing game {game.id}: {str(e)}")
+            logger.error(f"🔍 Error details: {type(e).__name__}")
+            
+            # Emergency fallback: ensure game is marked as finished even if completion fails
+            try:
+                game.status = 'FINISHED'
+                game.save()
+                logger.warning(f"⚠️ Set game {game.id} to FINISHED as emergency fallback")
+            except Exception as fallback_error:
+                logger.error(f"💥 Even fallback failed for game {game.id}: {str(fallback_error)}")
+            
+            return None
     
     @staticmethod
     def _auto_cash_out_all_bots(game):
         """
         Automatically cash out all remaining bot players when only bots remain.
         Called when a human cashes out and only bots are left playing.
+        
+        This method only handles cashing out the bots. Game completion logic
+        should be handled separately by the calling code.
         """
         # Get all bot players who haven't cashed out yet (regardless of active status)
         # because bots may be inactive after folding but still need to be cashed out
@@ -1796,12 +1897,7 @@ class GameService:
             logger.info(f"🤖💰 Bot {bot_pg.player.user.username} auto-cashed out with ${bot_pg.stack}")
         
         if cashed_out_count > 0:
-            logger.info(f"🤖💰 Auto-cashed out {cashed_out_count} bot players - game ending")
-            
-            # End the game since no active players remain
-            game.status = 'FINISHED'
-            game.save()
-            logger.info(f"🏁 Game {game.id} ended - only bots remained, all auto-cashed out")
+            logger.info(f"🤖💰 Auto-cashed out {cashed_out_count} bot players")
         
         return cashed_out_count
     

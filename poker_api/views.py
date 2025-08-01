@@ -377,8 +377,8 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
                     table.delete()  # This will cascade delete the game and all related data
                     logger.info(f"🗑️ Table '{table_name}' automatically deleted after game completion")
                 else:
-                    game.status = 'FINISHED'
-                    game.save()
+                    # No players remaining - use centralized completion logic
+                    GameService._complete_game(game, "No players remaining")
                 logger.info(f"🏁 Game {game.id} ended - no players remaining")
             elif active_players.count() == 1:
                 # Only one active player left, they win by default
@@ -387,9 +387,9 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
                     last_player.stack += game.pot
                     last_player.save()
                     game.pot = 0
-                    game.status = 'FINISHED'
-                    game.save()
-                    logger.info(f"🏁 Game {game.id} ended - only one active player remaining")
+                # Use centralized completion logic instead of just setting status
+                GameService._complete_game(game, "Only one active player remaining")
+                logger.info(f"🏁 Game {game.id} ended - only one active player remaining")
             
             return Response({
                 'success': True, 
@@ -460,6 +460,7 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
             )
     
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def cash_out(self, request, pk=None):
         """Cash out from active play (stay at table but become inactive)"""
         game = self.get_object()
@@ -500,13 +501,15 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
                     last_player.stack += game.pot
                     last_player.save()
                     game.pot = 0
-                    game.status = 'FINISHED'
-                    game.save()
-                    logger.info(f"🏁 Game {game.id} ended - only one active player remaining")
+                # Use centralized completion instead of just setting status
+                GameService._complete_game(game, "Only one active player remaining after cash out")
+                logger.info(f"🏁 Game {game.id} ended - only one active player remaining")
+                return Response({'success': True, 'stack': str(player_game.stack), 'game_ended': True})
             elif active_players.count() == 0:
-                game.status = 'FINISHED' 
-                game.save()
+                # Use centralized completion instead of just setting status
+                GameService._complete_game(game, "No active players remaining after cash out")
                 logger.info(f"🏁 Game {game.id} ended - no active players remaining")
+                return Response({'success': True, 'stack': str(player_game.stack), 'game_ended': True})
             else:
                 # Check if only bots remain (human cashed out, bots still at table)
                 # Note: Check all non-cashed-out players, not just active ones
@@ -526,19 +529,12 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
             game_summary_generated = False
             
             if all_players.count() > 0 and players_with_final_stack.count() == all_players.count():
-                # All players have cashed out, generate game summary
-                summary = game.generate_game_summary()
+                # All players have cashed out, use centralized completion logic
+                logger.info(f"📊 All players have cashed out - completing game {game.id}")
+                summary = GameService._complete_game(game, "All players cashed out")
                 game_summary_generated = True
-                logger.info(f"📊 Game summary generated for game {game.id}")
                 
-                # Broadcast special game summary notification to all connected clients
-                GameService.broadcast_game_summary_available(game.id, summary)
-                
-                # Automatically delete the table since the game is complete
-                table = game.table
-                table_name = table.name
-                table.delete()  # This will cascade delete the game and all related data
-                logger.info(f"🗑️ Table '{table_name}' automatically deleted after game completion")
+                # Note: Table is now deleted, so we can't broadcast regular updates
             else:
                 # Regular broadcast update to show player as cashed out
                 GameService.broadcast_game_update(game.id)
