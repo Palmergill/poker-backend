@@ -1,7 +1,5 @@
 """
-Django settings for poker_project.
-
-Simple, clean configuration for local development.
+Base settings for poker_project.
 """
 
 import os
@@ -9,15 +7,7 @@ from pathlib import Path
 from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '3e6151b75f6d1c8609785dad05adabf81119f43b066c29fc879a03bd5550df3d'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Application definition
 INSTALLED_APPS = [
@@ -68,14 +58,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'poker_project.wsgi.application'
 ASGI_APPLICATION = 'poker_project.asgi.application'
-
-# Database - SQLite for local development
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -130,20 +112,7 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
-# Channel layers configuration for WebSockets (using in-memory for development)
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
-
-# CORS settings for development
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
+# CORS headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -191,6 +160,3 @@ LOGGING = {
         'level': 'INFO',
     },
 }
-
-print("DEBUG: Clean settings.py loaded successfully!")
-print(f"DEBUG: Database configured as SQLite at: {BASE_DIR / 'db.sqlite3'}")

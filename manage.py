@@ -6,8 +6,13 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    # Use simple settings for local development
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'poker_project.settings')
+    # Detect Railway environment and set appropriate settings
+    if os.getenv('RAILWAY_ENVIRONMENT'):
+        default_settings = 'poker_project.settings.railway'
+    else:
+        default_settings = 'poker_project.settings.development'
+    
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', default_settings)
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
