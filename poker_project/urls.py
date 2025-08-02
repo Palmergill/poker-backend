@@ -7,7 +7,7 @@ from django.views.static import serve
 from django.conf import settings
 from django.http import HttpResponse
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from poker_api.views import simple_health_check
+from poker_api.health import minimal_health_check
 import os
 
 def serve_react_app(request):
@@ -67,7 +67,7 @@ urlpatterns = [
     path('api/', include('poker_api.urls')),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('health/', simple_health_check, name='simple_health_check'),
+    path('health/', minimal_health_check, name='minimal_health_check'),
     
     # React app specific files
     path('manifest.json', serve_manifest, name='manifest'),

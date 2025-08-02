@@ -18,7 +18,7 @@ from channels.security.websocket import AllowedHostsOriginValidator
 if os.getenv('RAILWAY_ENVIRONMENT'):
     default_settings = 'poker_project.settings.railway'
 else:
-    default_settings = 'poker_project.settings'
+    default_settings = 'poker_project.settings.development'
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', default_settings)
 
