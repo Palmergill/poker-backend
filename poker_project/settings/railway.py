@@ -17,7 +17,7 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '0.0.0.0',
-    'https://gillsgamestudio.com',
+    'gillsgamestudio.com',
     '.railway.app',  # Allow all Railway subdomains
 ]
 
@@ -64,7 +64,9 @@ else:
 
 # CORS settings for production
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = []
+CORS_ALLOWED_ORIGINS = [
+    'https://gillsgamestudio.com',
+]
 
 # Add Railway domains to CORS allowed origins
 if 'RAILWAY_STATIC_URL' in os.environ:
@@ -92,4 +94,5 @@ print("DEBUG: Railway settings loaded successfully!")
 print(f"DEBUG: Database URL configured: {'Yes' if 'DATABASE_URL' in os.environ else 'No (using SQLite fallback)'}")
 print(f"DEBUG: Redis URL configured: {'Yes' if 'REDIS_URL' in os.environ else 'No (using in-memory fallback)'}")
 print(f"DEBUG: Allowed hosts: {ALLOWED_HOSTS}")
+print(f"DEBUG: CORS allowed origins: {CORS_ALLOWED_ORIGINS}")
 print(f"DEBUG: Debug mode: {DEBUG}")
