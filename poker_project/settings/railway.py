@@ -24,7 +24,8 @@ ALLOWED_HOSTS = [
 # Add Railway-provided domain if available
 if 'RAILWAY_STATIC_URL' in os.environ:
     railway_domain = os.environ['RAILWAY_STATIC_URL'].replace('https://', '').replace('http://', '')
-    ALLOWED_HOSTS.append(railway_domain)
+    if railway_domain and railway_domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(railway_domain)
 
 # Database configuration for Railway (PostgreSQL)
 if 'DATABASE_URL' in os.environ:
@@ -68,14 +69,27 @@ CORS_ALLOWED_ORIGINS = [
     'https://gillsgamestudio.com',
 ]
 
-# Add Railway domains to CORS allowed origins
-if 'RAILWAY_STATIC_URL' in os.environ:
-    CORS_ALLOWED_ORIGINS.append(os.environ['RAILWAY_STATIC_URL'])
+# Helper function to ensure URL has proper scheme
+def ensure_url_scheme(url):
+    """Ensure URL has a proper scheme (https:// or http://)"""
+    if not url:
+        return None
+    if not url.startswith(('http://', 'https://')):
+        return f'https://{url}'
+    return url
 
-# Also allow common frontend domains
+# Add Railway domains to CORS allowed origins with proper scheme
+if 'RAILWAY_STATIC_URL' in os.environ:
+    railway_url = ensure_url_scheme(os.environ['RAILWAY_STATIC_URL'])
+    if railway_url and railway_url not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(railway_url)
+
+# Also allow common frontend domains with proper scheme
 frontend_url = os.environ.get('FRONTEND_URL')
 if frontend_url:
-    CORS_ALLOWED_ORIGINS.append(frontend_url)
+    frontend_url = ensure_url_scheme(frontend_url)
+    if frontend_url and frontend_url not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(frontend_url)
 
 # Security settings for production
 SECURE_SSL_REDIRECT = not DEBUG
