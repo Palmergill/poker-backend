@@ -5,18 +5,35 @@ This module has no model imports to avoid Django app initialization issues.
 
 import time
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 
 
+@csrf_exempt
+@never_cache
 def minimal_health_check(request):
     """
     Ultra-minimal health check endpoint that doesn't import any models.
     Perfect for Railway deployment health checks.
+    
+    This view is exempt from CSRF protection and SSL redirects to ensure
+    Railway health checks work properly.
     """
-    return JsonResponse({
+    # Set security headers to indicate this is safe for HTTP access
+    response = JsonResponse({
         'status': 'healthy',
         'timestamp': time.time(),
         'service': 'poker_api'
     }, status=200)
+    
+    # Add headers to prevent caching and indicate health check
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    response['X-Health-Check'] = 'true'
+    
+    return response
 
 
 def basic_health_check(request):

@@ -92,7 +92,8 @@ if frontend_url:
         CORS_ALLOWED_ORIGINS.append(frontend_url)
 
 # Security settings for production
-SECURE_SSL_REDIRECT = not DEBUG
+# Disable SSL redirect for Railway health checks (Railway handles SSL termination)
+SECURE_SSL_REDIRECT = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
